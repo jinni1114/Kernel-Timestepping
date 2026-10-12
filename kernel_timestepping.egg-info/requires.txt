@@ -1,0 +1,12 @@
+jax
+jaxlib
+numpy
+scipy
+jaxkernels @ git+https://github.com/AHsu98/JaxKernels
+
+[examples]
+matplotlib
+ipykernel
+
+[test]
+pytest

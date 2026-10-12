@@ -1,0 +1,15 @@
+Metadata-Version: 2.4
+Name: kernel-timestepping
+Version: 0.1.0
+Summary: Kernel time-stepping equation learning with a KMD operator library (JAX, JaxKernels).
+Requires-Python: >=3.10
+Requires-Dist: jax
+Requires-Dist: jaxlib
+Requires-Dist: numpy
+Requires-Dist: scipy
+Requires-Dist: jaxkernels @ git+https://github.com/AHsu98/JaxKernels
+Provides-Extra: examples
+Requires-Dist: matplotlib; extra == "examples"
+Requires-Dist: ipykernel; extra == "examples"
+Provides-Extra: test
+Requires-Dist: pytest; extra == "test"
