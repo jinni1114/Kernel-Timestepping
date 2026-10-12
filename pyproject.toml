@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kernel-timestepping"
+version = "0.1.0"
+description = "Kernel time-stepping equation learning with a KMD operator library (JAX, JaxKernels)."
+requires-python = ">=3.10"
+dependencies = [
+    "jax",
+    "jaxlib",
+    "numpy",
+    "scipy",
+    "jaxkernels @ git+https://github.com/AHsu98/JaxKernels",
+]
+
+[project.optional-dependencies]
+examples = ["matplotlib", "ipykernel"]
+test = ["pytest"]
+
+[tool.setuptools.packages.find]
+include = ["kernel_timestepping"]
