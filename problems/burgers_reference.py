@@ -1,4 +1,4 @@
-"""Reference data for the examples and tests: a fine-grid solver for the viscous Burgers-type equation
+"""Reference data for the experiments and tests: a fine-grid solver for the viscous Burgers-type equation
 
     u_t = kappa u_xx + alpha u u_x,   x in (0, 1),   u(t, 0) = u(t, 1) = 0,
 

@@ -8,7 +8,7 @@ The columns share the spatial kernel and are coupled only through the last term,
 acceleration u_tt. It smooths the state in time without shrinking the rate u_t, which is the target of the operator
 fit. lam_addot = 0 fits every column on its own.
 
-In whitened coordinates alpha_n = L^-T w_n (state.py) both regularisers are Euclidean, so with w = (w_0, .., w_{N_T-1})
+In whitened coordinates alpha_n = L^-T w_n (state_basis.py) both regularisers are Euclidean, so with w = (w_0, .., w_{N_T-1})
 stacked the problem is one ridge regression, solved through an SVD:
 
     min_w ||M_aug w - y_aug||^2 + lam_u ||w||^2,

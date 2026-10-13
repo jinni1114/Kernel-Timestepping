@@ -1,4 +1,5 @@
-"""End-to-end checks on the setting of examples/kmd_fit_and_rollout.ipynb, and of the selection rule."""
+"""End-to-end checks of the four methods on the setting of experiments/burgers_walkthrough.ipynb, and of the selection
+rule."""
 import copy
 
 import jax.numpy as jnp
@@ -7,8 +8,8 @@ import pytest
 from jaxkernels import GaussianRBFKernel, LinearKernel, MaternKernel
 
 import kernel_timestepping as kt
-from kernel_timestepping.burgers import ReferenceSolution, solve_burgers
-from kernel_timestepping.lengthscale import state_lengthscale
+from kernel_timestepping.state_lengthscale import state_lengthscale
+from problems.burgers_reference import ReferenceSolution, solve_burgers
 
 KAPPA, ALPHA = 0.01, 1.0
 
@@ -61,7 +62,7 @@ def test_operator_matches_library_evaluation(problem, fitted):
     assert np.allclose(fitted.operator(jets), by_hand)
 
 
-def test_refinements_improve_the_two_step_fit(problem, fitted):
+def test_refits_improve_the_two_step_soft_fit(problem, fitted):
     truth, grid, obs = problem
     soft_error = rollout_error(fitted, truth, grid)
     jets_true = truth.jets(grid.t, grid.x_int)
@@ -69,13 +70,32 @@ def test_refinements_improve_the_two_step_fit(problem, fitted):
     def uxx_error(alpha):
         return kt.relative_l2(np.asarray(fitted.basis.jets(jnp.asarray(alpha)))[..., 2], jets_true[..., 2])
 
-    through_rollout = copy.copy(fitted).refine_through_rollout()
-    assert through_rollout.rollout_fit_.success
-    assert rollout_error(through_rollout, truth, grid) < 0.5 * soft_error
+    two_step_hard = copy.copy(fitted).refit_two_step_operator_hard()
+    assert two_step_hard.refit_result_.success and two_step_hard.method_ == "two_step_hard"
+    assert rollout_error(two_step_hard, truth, grid) < 0.5 * soft_error
 
-    joint = copy.copy(fitted).refine_jointly(obs, kt.JointWeights(dyn=1.0), maxiter=4000)
-    assert uxx_error(joint.alpha_) < 0.5 * uxx_error(fitted.alpha_)
-    assert rollout_error(joint, truth, grid) < 0.5 * soft_error
+    one_step_soft = copy.copy(fitted).refit_one_step_soft(obs, kt.OneStepWeights(dyn=1.0), maxiter=4000)
+    assert uxx_error(one_step_soft.alpha_) < 0.5 * uxx_error(fitted.alpha_)
+    assert rollout_error(one_step_soft, truth, grid) < 0.5 * soft_error
+
+
+def test_one_step_hard_state_is_the_rollout_of_its_first_column(problem, fitted):
+    _, _, obs = problem
+    one_step_hard = copy.copy(fitted).refit_one_step_hard(obs, max_nfev=5)
+    rolled = one_step_hard.stepper_.rollout(jnp.asarray(one_step_hard.alpha_[0]), jnp.asarray(one_step_hard.coef_),
+                                            one_step_hard.grid.n_steps)
+    assert np.allclose(one_step_hard.alpha_, np.asarray(rolled))
+    assert one_step_hard.library_.names == fitted.library_.names          # the atom set stays fixed
+
+
+def test_fit_method_runs_the_same_stages(problem, fitted):
+    _, grid, obs = problem
+    model = kt.KMDTimeStepper(fitted.basis.kernel, grid)
+    model.fit(obs, method="two_step_hard", lam_addot_grid=[0.0, 1e-10, 1e-8, 1e-6])
+    staged = copy.copy(fitted).refit_two_step_operator_hard()
+    assert model.method_ == "two_step_hard" and np.allclose(model.coef_, staged.coef_)
+    with pytest.raises(ValueError):
+        model.fit(obs, method="three_step")
 
 
 def test_one_standard_error_rule_picks_the_smallest_set_within_one_se():

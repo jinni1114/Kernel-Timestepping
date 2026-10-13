@@ -1,8 +1,8 @@
 # Kernel time-stepping equation learning with a KMD operator library
 
 This document describes, as an algorithm, the method labelled "ours" in
-[`keql_comparison_withKMD_3B_executed.ipynb`](keql_comparison_withKMD_3B_executed.ipynb), and how the
-[`kernel_timestepping`](kernel_timestepping/) package implements it. The parts of that notebook that run
+[`archive/keql_fig3B_original.ipynb`](../archive/keql_fig3B_original.ipynb), and how the
+[`kernel_timestepping`](../kernel_timestepping/) package implements it. The parts of that notebook that run
 Kernel Equation Learning (`keql_tools`) for comparison are not covered.
 
 It was written from the notebook's code. The notebook's comments cite pages of a separate note ("note p.3" etc.) for the
@@ -250,17 +250,23 @@ output: P_hat(s) = Psi_A(s) b;  rollout alpha_n = Phi^n(K^-1 u_0; b)
 
 | Module | Contents | Notebook cell |
 |---|---|---|
-| `grid.py` | `SpaceTimeGrid`, `NodalObservations`, `sample_nodal_observations`, `blended_chebyshev_nodes`, `interior_folds`, `time_blocks` | data cell |
-| `state.py` | `StateBasis` ($K$, $D_q$, whitening, jets) | "Pick state kernel" |
-| `lengthscale.py` | `state_lengthscale` (the marginal-likelihood fit of section 2) | "Pick state kernel" |
-| `state_fit.py` | `fit_state`, `ridge_svd` | "State fit" |
-| `cv.py` | `heldout_rmse`, `grid_search` | CV loops |
-| `library.py` | `Feature`, `Atom`, `AtomLibrary`, `build_library` | "Operator KMD library" |
-| `operator_fit.py` | `OperatorRegression`, `backward_elimination`, `one_standard_error`, `select_atoms`, `fit_operator_through_rollout` | "Operator fit", "2-step hard" |
-| `dynamics.py` | `ThetaStepper` (residual, Newton step, rollout) | `make_stepper` |
-| `joint_fit.py` | `JointWeights`, `fit_joint_soft`, `fit_joint_hard` | "1-step soft", "1-step hard" |
-| `model.py` | `KMDTimeStepper`: the two-step pipeline as one object | |
-| `burgers.py` | reference solver and spline of its solution, for examples and tests only | |
+| `spacetime_grid.py` | `SpaceTimeGrid`, `NodalObservations`, `sample_nodal_observations`, `blended_chebyshev_nodes`, `interior_folds`, `time_blocks` | data cell |
+| `state_basis.py` | `StateBasis` ($K$, $D_q$, whitening, jets) | "Pick state kernel" |
+| `state_lengthscale.py` | `state_lengthscale` (the marginal-likelihood fit of section 2) | "Pick state kernel" |
+| `kmd_library.py` | `Feature`, `Atom`, `AtomLibrary`, `build_library` | "Operator KMD library" |
+| `theta_stepper.py` | `ThetaStepper` (residual, Newton step, rollout) | `make_stepper` |
+| `two_step_state_fit.py` | `fit_state`, `ridge_svd` | "State fit" |
+| `two_step_operator_soft.py` | `OperatorRegression` | "Operator fit" |
+| `atom_selection.py` | `backward_elimination`, `one_standard_error`, `select_atoms` | "Operator fit" |
+| `two_step_operator_hard.py` | `fit_two_step_operator_hard` | "2-step hard" |
+| `one_step_soft.py` | `OneStepWeights`, `fit_one_step_soft` | "1-step soft" |
+| `one_step_hard.py` | `fit_one_step_hard` | "1-step hard" |
+| `cross_validation.py` | `heldout_rmse`, `grid_search` | CV loops |
+| `jax_optimizers.py` | `least_squares_jax`, `lbfgs_jax` | |
+| `pipeline.py` | `KMDTimeStepper`: the four methods as one object, `fit(obs, method=...)` | |
+
+The reference solver and spline of its solution, for experiments and tests only, are in
+[`problems/burgers_reference.py`](../problems/burgers_reference.py), outside the package.
 
 ```python
 from jaxkernels import GaussianRBFKernel
@@ -268,12 +274,13 @@ import kernel_timestepping as kt
 
 grid = kt.SpaceTimeGrid(x=kt.blended_chebyshev_nodes(31), dt=0.04, n_t=26)
 obs = kt.NodalObservations.from_points(grid, tx_obs, u_obs)          # (t, x) coordinates and values
-model = kt.KMDTimeStepper(GaussianRBFKernel(lengthscale=kt.state_lengthscale(grid, obs)), grid).fit(obs)
+model = kt.KMDTimeStepper(GaussianRBFKernel(lengthscale=kt.state_lengthscale(grid, obs)), grid)
+model.fit(obs, method="two_step_soft")                               # or two_step_hard, one_step_soft, one_step_hard
 print(model.summary())                                               # selected atoms, coefficients
 u = model.rollout(u0_nodes, n_steps=50)                              # (51, 31) nodal values
 ```
 
-[`examples/kmd_fit_and_rollout.ipynb`](examples/kmd_fit_and_rollout.ipynb) goes through the stages one function at a
+[`experiments/burgers_walkthrough.ipynb`](../experiments/burgers_walkthrough.ipynb) goes through the stages one function at a
 time. Install with `pip install -e ".[examples,test]"`; run the tests with `pytest`.
 
 **How JaxKernels is used.**
