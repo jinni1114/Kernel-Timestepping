@@ -88,6 +88,15 @@ def test_one_step_hard_state_is_the_rollout_of_its_first_column(problem, fitted)
     assert one_step_hard.library_.names == fitted.library_.names          # the atom set stays fixed
 
 
+def test_one_step_hard_with_default_weights_recovers_the_equation(problem, fitted):
+    """The state norm is on alpha_0 only: a norm on the rolled-out columns biased u*u_x to about 0.49 here."""
+    truth, grid, obs = problem
+    one_step_hard = copy.copy(fitted).refit_one_step_hard(obs)
+    slopes, _ = one_step_hard.library_.linear_coefficients(one_step_hard.coef_)
+    assert abs(slopes["u_xx"] - KAPPA) < 0.01 * KAPPA and abs(slopes["u*u_x"] - ALPHA) < 0.01 * ALPHA
+    assert rollout_error(one_step_hard, truth, grid) < 0.1 * rollout_error(fitted, truth, grid)
+
+
 def test_fit_method_runs_the_same_stages(problem, fitted):
     _, grid, obs = problem
     model = kt.KMDTimeStepper(fitted.basis.kernel, grid)

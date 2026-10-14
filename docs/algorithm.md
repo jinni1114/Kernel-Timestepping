@@ -208,11 +208,15 @@ Unknowns: $\alpha_0$ and $b_{\mathcal A}$ only. Every later column is $\alpha_n 
 hold exactly and the $\lambda_{\rm dyn}$ term disappears:
 
 $$J(\alpha_0, b) = \lambda_d \sum_{(n,k)\in\Omega} \big(y_{nk} - (K\alpha_n)_k\big)^2
- + \lambda_\alpha \sum_n \alpha_n^\top K \alpha_n + \lambda_\beta \sum_m \beta_m^\top K_m \beta_m
+ + \lambda_\alpha\, \alpha_0^\top K \alpha_0 + \lambda_\beta \sum_m \beta_m^\top K_m \beta_m
  + \frac{\lambda_{\ddot a}}{\Delta t^4} \sum_n \lVert \alpha_{n+1} - 2\alpha_n + \alpha_{n-1} \rVert_K^2 .$$
 
 Solved like the two-step hard fit (least squares, Jacobian through the rollout), started from the one-step soft
 solution, with $\lambda_{\ddot a}$ by the same CV. In the notebook this cell runs only for experiment 3A.
+
+The package penalises the state norm on $\alpha_0$ only, the one free state variable. The notebook penalises
+$\lambda_\alpha \sum_n \alpha_n^\top K \alpha_n$ over all rolled-out columns, which fails when $K$ is
+ill-conditioned (section 9).
 
 ## 7. Summary and defaults
 
@@ -354,17 +358,23 @@ lowest CV score at 5 atoms; the one-standard-error rule reduces it to the two tr
   and roll out less accurately (3 to 5 % against 1 to 1.5 %). With a different initial condition
   ($0.3 \sin \pi x + 0.2 \sin 2\pi x - 0.1 \sin 3\pi x$), one draw of three selected an RBF atom on $u u_x$ in place of
   the linear one, and its rollout diverged.
-* **The one-step hard fit is sensitive to the conditioning of $K$.** Its loss penalises
-  $\lambda_\alpha \sum_n \alpha_n^\top K \alpha_n$ on rolled-out columns, and every step of a rollout solves a linear
-  system with a matrix close to $K$.
+* **The notebook's one-step hard loss is sensitive to the conditioning of $K$; the package's is not.** The notebook
+  penalises $\lambda_\alpha \sum_n \alpha_n^\top K \alpha_n$ on rolled-out columns, and every step of a rollout solves a
+  linear system with a matrix close to $K$.
   $\mathrm{cond}(K)$ is 4e5 at $\ell_x = 0.053$ (3B), 8e8 at 0.0755 (3A) and 4e14 at 0.109 (example notebook). In the
   example, the rollout of the one-step soft solution has data misfit 1.2e-6 but $\lambda_\alpha \times$ norm = 3.2e3 at
   $\lambda_\alpha = 10^{-6}$; minimising the hard loss from there moves the coefficient of $u u_x$ from 0.99 to 0.50.
   Lowering $\lambda_\alpha$ to $10^{-12}$ still leaves it at 0.87. On the 3A data the same fit works (table above).
+  Penalising $\alpha_0$ only (the package's `fit_one_step_hard`) gives 0.9982 for the coefficient of $u u_x$, 0.01000
+  for $u_{xx}$ and a rollout error of 0.03 % in the example, from the two-step soft fit with the default weights; the
+  result is the same for $\lambda_\alpha$ on $\alpha_0$ from $10^{-10}$ to $10^{-6}$. Over the five observation draws
+  of the example it improves on the two-step soft rollout error in all five (0.03-0.04 % on the three draws that
+  select only the true atoms; 1.2 % and 1.0 % on the two that keep an extra atom on $u_{xxx}$, where the optimiser stops after
+  3 to 4 evaluations).
   The soft variants are not affected: their states are penalised fits, not rollouts.
 * **The two-step hard fit can stall with kernel atoms on $u_{xxx}$.** For one of the draws above, the optimiser
   stopped after 11 evaluations with unchanged coefficients (step-size tolerance reached, gradient not small).
-  `KMDTimeStepper.rollout_fit_` keeps the optimiser result so this can be checked.
+  `KMDTimeStepper.refit_result_` keeps the optimiser result so this can be checked.
 * **The one-step soft fit often ends at the iteration cap** (20 000 L-BFGS iterations). On the 3A data it converged
   after about 11 500; in the example it reached the cap, and running it to convergence (about 29 400 iterations)
   changed the coefficients in the sixth digit.
