@@ -1,9 +1,9 @@
 """Step 2 of the two-step method, soft constraint: fit the operator on a frozen state.
 
 With the state frozen at alpha_bar, the dynamic residual (theta_stepper.py) is linear in b. Its boundary rows do not
-contain b; at the interior nodes
+contain b; at the collocation nodes
 
-    e_n = d_n - A_n b,   d_n = (K alpha_bar_{n+1} - K alpha_bar_n)_int,
+    e_n = d_n - A_n b,   d_n = (K alpha_bar_{n+1} - K alpha_bar_n)_col,
                          A_n = dt [theta Psi(s_{n+1}) + (1 - theta) Psi(s_n)],
 
 so for a set of active atoms (columns of A)
@@ -27,19 +27,19 @@ from .kmd_library import AtomLibrary
 
 @dataclass(frozen=True)
 class OperatorRegression:
-    """The linear regression for b on a frozen state: e_n = d_n - A_n b at the interior nodes (module docstring)."""
+    """The linear regression for b on a frozen state: e_n = d_n - A_n b at the collocation nodes (module docstring)."""
     library: AtomLibrary
-    A: np.ndarray           # (N_steps, N_X - 2, n_coef)
-    d: np.ndarray           # (N_steps, N_X - 2)
+    A: np.ndarray           # (N_steps, N_C, n_coef)
+    d: np.ndarray           # (N_steps, N_C)
     penalty: np.ndarray     # (n_coef, n_coef) blockdiag(K_m)
     lam_dyn: float = 1.0
 
     @classmethod
     def from_state(cls, basis, library, alpha, dt, theta=0.5, lam_dyn=1.0):
-        psi = np.asarray(library.design(basis.jets(jnp.asarray(alpha))))        # (N_T, N_X - 2, n_coef)
-        u = np.asarray(basis.values(alpha))
-        return cls(library, dt * (theta * psi[1:] + (1 - theta) * psi[:-1]), u[1:, 1:-1] - u[:-1, 1:-1],
-                   library.penalty(), lam_dyn)
+        psi = np.asarray(library.design(basis.jets(jnp.asarray(alpha))))        # (N_T, N_C, n_coef)
+        u = np.asarray(basis.values(alpha))[:, basis.collocation]
+        return cls(library, dt * (theta * psi[1:] + (1 - theta) * psi[:-1]), u[1:] - u[:-1], library.penalty(),
+                   lam_dyn)
 
     @property
     def n_steps(self):
@@ -64,7 +64,7 @@ class OperatorRegression:
         return self._solve(*self._normal_equations(cols, steps), cols, lam_beta)
 
     def residual(self, atoms, coef, steps=None):
-        """e_n at the interior nodes for the time steps `steps`: (len(steps), N_X - 2)."""
+        """e_n at the collocation nodes for the time steps `steps`: (len(steps), N_C)."""
         steps = np.arange(self.n_steps) if steps is None else np.asarray(steps)
         return self.d[steps] - self.A[steps][..., self.library.columns(atoms)] @ coef
 

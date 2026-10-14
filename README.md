@@ -18,12 +18,21 @@ selected atoms, started from the two-step soft fit.
 
 ```
 kernel_timestepping/   the method (installed)
-problems/              reference solvers for experiments and tests (not installed)
-experiments/           notebooks, one per experiment; burgers_walkthrough.ipynb goes through every stage
+problems/              reference solvers for experiments and tests (not installed): Burgers (fixed boundary values);
+                       advection-diffusion, KdV, Kuramoto-Sivashinsky (periodic, spectral ETDRK4)
+experiments/           notebooks, one per experiment; burgers_walkthrough.ipynb goes through every stage;
+                       advection_diffusion, kdv, kuramoto_sivashinsky run the same pipeline on periodic domains
 archive/               original notebooks, kept frozen (KEqL Fig. 3B comparison; SINDy/4DVar)
 docs/                  algorithm description
 tests/                 pytest
 ```
+
+## Boundaries
+
+`SpaceTimeGrid(x, dt, n_t)` holds the values at `x[0]` and `x[-1]` fixed and collocates the PDE at the interior nodes.
+`SpaceTimeGrid(kt.periodic_nodes(n, P), dt, n_t, period=P)` is periodic: the PDE is collocated at every node; use a
+periodic state kernel (`jaxkernels.PeriodicKernel`) and, for smooth kernels, `state_lengthscale(..., max_cond=1e12)`
+to keep $K$ invertible. Features go up to the derivative order of the basis (`max_order=4` for KS).
 
 ## Run
 

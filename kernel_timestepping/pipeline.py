@@ -44,7 +44,7 @@ class KMDTimeStepper:
     def __init__(self, kernel, grid, *, max_order=3, features=None, atom_kernels=None, n_inducing=15, theta=0.5,
                  newton_iters=6, lam_u=1e-6, nugget=1e-8):
         self.grid = grid
-        self.basis = StateBasis.build(kernel, grid.x, max_order=max_order, nugget=nugget)
+        self.basis = StateBasis.build(kernel, grid, max_order=max_order, nugget=nugget)
         self.features, self.atom_kernels, self.n_inducing = features, atom_kernels, n_inducing
         self.theta, self.newton_iters, self.lam_u = theta, newton_iters, lam_u
 

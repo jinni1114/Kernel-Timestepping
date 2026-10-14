@@ -1,8 +1,9 @@
 """Theta-scheme time stepping of u_t = P(u, u_x, ...) in the coefficients of the spatial kernel basis.
 
-Right-hand side on all nodes, zero in the two boundary rows (the boundary values do not move):
+Right-hand side on all nodes: P at the collocation nodes, zero at the boundary nodes (their values do not move; a
+periodic grid has none):
 
-    r(alpha; b) = [0; P(s(x_k; alpha); b), k = 1..N_X-2; 0].
+    r(alpha; b)_k = P(s(x_k; alpha); b) for k in collocation,   0 for k in boundary.
 
 Dynamic residual of one step (theta = 1/2: Crank-Nicolson, theta = 1: backward Euler):
 
@@ -19,20 +20,21 @@ import jax.numpy as jnp
 class ThetaStepper:
     """Step map and rollout for the operator P(jets, params) -> values at the interior nodes.
 
-    operator: callable (jets (N_X - 2, Q + 1), params) -> (N_X - 2,), written in jax (e.g. AtomLibrary.evaluate).
+    operator: callable (jets (N_C, Q + 1), params) -> (N_C,), written in jax (e.g. AtomLibrary.evaluate).
     """
 
     def __init__(self, basis, operator, dt, theta=0.5, newton_iters=6):
         self.basis, self.operator = basis, operator
         self.dt, self.theta, self.newton_iters = float(dt), float(theta), int(newton_iters)
         self._K = jnp.asarray(basis.K)
+        self._collocation = jnp.asarray(basis.collocation)
         self._rollout = jax.jit(self._scan, static_argnums=2)
 
     def rhs(self, alpha, params):
-        """r(alpha; b) for one column alpha (N_X,) or a trajectory (N_T, N_X): P at the interior nodes, zero rows
-        at the boundary."""
+        """r(alpha; b) for one column alpha (N_X,) or a trajectory (N_T, N_X): P at the collocation nodes, zero at
+        the boundary nodes."""
         values = self.operator(self.basis.jets(alpha), params)
-        return jnp.pad(values, [(0, 0)] * (values.ndim - 1) + [(1, 1)])
+        return jnp.zeros(values.shape[:-1] + (self.basis.n_x,), values.dtype).at[..., self._collocation].set(values)
 
     def residual(self, alphas, params):
         """e for every step of a trajectory: alphas (N_T, N_X) -> (N_T - 1, N_X), row n = e(alpha_{n+1}, alpha_n)."""

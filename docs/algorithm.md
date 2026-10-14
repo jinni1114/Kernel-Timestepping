@@ -255,12 +255,12 @@ output: P_hat(s) = Psi_A(s) b;  rollout alpha_n = Phi^n(K^-1 u_0; b)
 
 | Module | Contents | Notebook cell |
 |---|---|---|
-| `spacetime_grid.py` | `SpaceTimeGrid`, `NodalObservations`, `sample_nodal_observations`, `blended_chebyshev_nodes`, `interior_folds`, `time_blocks` | data cell |
+| `spacetime_grid.py` | `SpaceTimeGrid` (fixed boundary values, or periodic with `period=`), `NodalObservations`, `sample_nodal_observations`, `blended_chebyshev_nodes`, `periodic_nodes`, `interior_folds`, `time_blocks` | data cell |
 | `state_basis.py` | `StateBasis` ($K$, $D_q$, whitening, jets) | "Pick state kernel" |
-| `state_lengthscale.py` | `state_lengthscale` (the marginal-likelihood fit of section 2) | "Pick state kernel" |
+| `state_lengthscale.py` | `state_lengthscale` (the marginal-likelihood fit of section 2; optional cap on cond($K$) via `capped_lengthscale`) | "Pick state kernel" |
 | `kmd_library.py` | `Feature`, `Atom`, `AtomLibrary`, `build_library` | "Operator KMD library" |
 | `theta_stepper.py` | `ThetaStepper` (residual, Newton step, rollout) | `make_stepper` |
-| `two_step_state_fit.py` | `fit_state`, `ridge_svd` | "State fit" |
+| `two_step_state_fit.py` | `fit_state` (banded Cholesky of the block-pentadiagonal normal equations), `ridge_svd` | "State fit" |
 | `two_step_operator_soft.py` | `OperatorRegression` | "Operator fit" |
 | `atom_selection.py` | `backward_elimination`, `one_standard_error`, `select_atoms` | "Operator fit" |
 | `two_step_operator_hard.py` | `fit_two_step_operator_hard` | "2-step hard" |
@@ -270,8 +270,13 @@ output: P_hat(s) = Psi_A(s) b;  rollout alpha_n = Phi^n(K^-1 u_0; b)
 | `jax_optimizers.py` | `least_squares_jax`, `lbfgs_jax` | |
 | `pipeline.py` | `KMDTimeStepper`: the four methods as one object, `fit(obs, method=...)` | |
 
-The reference solver and spline of its solution, for experiments and tests only, are in
-[`problems/burgers_reference.py`](../problems/burgers_reference.py), outside the package.
+The reference solvers, for experiments and tests only, are outside the package:
+[`problems/burgers_reference.py`](../problems/burgers_reference.py) (finite differences, fixed boundary values) and
+[`problems/periodic_reference.py`](../problems/periodic_reference.py) (Fourier ETDRK4: advection-diffusion, KdV,
+Kuramoto-Sivashinsky).
+
+*Periodic domains.* With `SpaceTimeGrid(..., period=P)` there are no boundary nodes: the jets, the residual $e$ and
+the operator regression use every node, and $r(\alpha; b)$ has no zero rows. Everything else is unchanged.
 
 ```python
 from jaxkernels import GaussianRBFKernel

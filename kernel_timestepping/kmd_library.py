@@ -29,16 +29,17 @@ class Feature(NamedTuple):
     fn: Callable
 
 
-def default_features():
-    """(u, u_x, u_xx, u_xxx, u u_x, u^2): needs jets up to the third derivative."""
-    return (
-        Feature("u", lambda s: s[..., 0]),
-        Feature("u_x", lambda s: s[..., 1]),
-        Feature("u_xx", lambda s: s[..., 2]),
-        Feature("u_xxx", lambda s: s[..., 3]),
-        Feature("u*u_x", lambda s: s[..., 0] * s[..., 1]),
-        Feature("u^2", lambda s: s[..., 0] ** 2),
-    )
+def derivative_name(order):
+    """'u', 'u_x', 'u_xx', ...: the name of the order-th x-derivative."""
+    return "u" if order == 0 else "u_" + "x" * order
+
+
+def default_features(max_order=3):
+    """(u, u_x, ..., d^Q u, u u_x, u^2) for jets up to the derivative of order Q = max_order (>= 1); Q = 3 gives
+    (u, u_x, u_xx, u_xxx, u u_x, u^2)."""
+    derivatives = tuple(Feature(derivative_name(q), lambda s, q=q: s[..., q]) for q in range(max_order + 1))
+    return derivatives + (Feature("u*u_x", lambda s: s[..., 0] * s[..., 1]),
+                          Feature("u^2", lambda s: s[..., 0] ** 2))
 
 
 def default_atom_kernels():
@@ -162,9 +163,10 @@ def build_library(reference_jets, features=None, kernels=None, n_inducing=15, co
 
     reference_jets: (..., Q + 1) jets of the reference state (the Step-1 fit); they fix the standardisation
     (mean, and standard deviation with ddof = 1, over all points) and the range of the inducing points.
+    features: default default_features(Q), all derivatives the jets hold, plus u u_x and u^2.
     kernels: {name: JaxKernels kernel on scalars} (default: linear, RBF, Matern 3/2).
     """
-    features = default_features() if features is None else tuple(features)
+    features = default_features(np.shape(reference_jets)[-1] - 1) if features is None else tuple(features)
     kernels = default_atom_kernels() if kernels is None else dict(kernels)
     raw = np.stack([np.asarray(feature.fn(jnp.asarray(reference_jets))).ravel() for feature in features], axis=-1)
     center, scale = raw.mean(0), raw.std(0, ddof=1)
