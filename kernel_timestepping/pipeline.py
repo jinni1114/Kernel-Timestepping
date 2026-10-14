@@ -10,6 +10,8 @@ The atoms are selected once, by two_step_soft; the other three methods refit the
 two_step_soft fit. Each stage is a plain function in its own module; KMDTimeStepper only wires them together and keeps
 the fitted quantities. Fitted attributes end with an underscore.
 """
+from dataclasses import replace
+
 import jax.numpy as jnp
 import numpy as np
 
@@ -26,6 +28,8 @@ from .two_step_operator_soft import OperatorRegression
 from .two_step_state_fit import fit_state
 
 METHODS = ("two_step_soft", "two_step_hard", "one_step_soft", "one_step_hard")
+LAM_DYN_GRID = np.r_[0, np.logspace(-4, 2, 13)]                   # one-step soft CV grids, as in the original notebook
+LAM_ADDOT_GRID = (0.0, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6)             # (plus the Step-1 lam_addot)
 
 
 class KMDTimeStepper:
@@ -49,8 +53,8 @@ class KMDTimeStepper:
     def fit(self, obs, method="two_step_soft", *, lam_addot_grid=None, lam_beta_grid=None, n_folds=5, n_blocks=5,
             seed=0, weights=OneStepWeights(), lam_beta_hard=1e-6, **options):
         """Run `method` (one of METHODS, module docstring). `weights` are the one-step weights, `lam_beta_hard` the
-        coefficient penalty of two_step_hard; `options` go to the refit's optimiser (maxiter for one_step_soft,
-        max_nfev for two_step_hard and one_step_hard)."""
+        coefficient penalty of two_step_hard; `options` go to the refit (refit_one_step_soft: lam_dyn_grid,
+        lam_addot_grid_one_step, cv_maxiter, maxiter; two_step_hard and one_step_hard: max_nfev)."""
         if method not in METHODS:
             raise ValueError(f"method must be one of {METHODS}, got {method!r}")
         self.fit_state(obs, lam_addot_grid, n_folds, seed).fit_two_step_operator_soft(lam_beta_grid, n_blocks)
@@ -69,7 +73,7 @@ class KMDTimeStepper:
         """Two-step, Step 1: state fit with the time prior, its weight chosen by K-fold CV on the interior
         observations."""
         grid_values = np.r_[0, np.logspace(-12, -1, 23)] if lam_addot_grid is None else np.asarray(lam_addot_grid)
-        folds = interior_folds(self.grid, obs, n_folds, seed)
+        self.folds_ = folds = interior_folds(self.grid, obs, n_folds, seed)
         self.state_cv_ = grid_search(grid_values, lambda lam: heldout_rmse(
             lambda train: fit_state(self.basis, self.grid, train, self.lam_u, lam), self.basis, obs, folds))
         self.alpha_ = fit_state(self.basis, self.grid, obs, self.lam_u, self.state_cv_.best)
@@ -94,15 +98,41 @@ class KMDTimeStepper:
         self.coef_, self.method_ = np.asarray(coef), "two_step_hard"
         return self
 
-    def refit_one_step_soft(self, obs, weights=OneStepWeights(), maxiter=20000):
-        """One-step soft on the selected atoms, started from the current fit: all state columns and coefficients."""
-        alpha, coef, self.refit_result_ = fit_one_step_soft(self.stepper_, self.library_, self.grid, obs, self.alpha_,
-                                                            self.coef_, weights, maxiter)
-        self.alpha_, self.coef_, self.method_ = np.asarray(alpha), np.asarray(coef), "one_step_soft"
+    def refit_one_step_soft(self, obs, weights=OneStepWeights(), lam_dyn_grid=LAM_DYN_GRID,
+                            lam_addot_grid_one_step=LAM_ADDOT_GRID, cv_maxiter=5000, maxiter=20000):
+        """One-step soft on the selected atoms, started from the current fit: all state columns and coefficients.
+
+        The weights are chosen as in the original notebook, by K-fold CV on held-out interior observations with the
+        Step-1 folds: first lam_dyn on lam_dyn_grid with lam_addot = 0, then lam_addot on lam_addot_grid_one_step plus
+        the Step-1 value, at the chosen lam_dyn. Every CV fit starts from the current fit and runs at most cv_maxiter
+        L-BFGS iterations; the final fit on all observations runs at most maxiter. A grid set to None keeps the value
+        in `weights` (lam_dyn_grid=None, lam_addot_grid_one_step=None: no CV). The scores are kept in
+        one_step_cv_ = {"dyn": GridSearch, "addot": GridSearch}.
+        """
+        alpha_start, coef_start = self.alpha_, self.coef_
+
+        def fit_weights(train, w, iterations):
+            return fit_one_step_soft(self.stepper_, self.library_, self.grid, train, alpha_start, coef_start, w,
+                                     iterations)
+
+        def cv_score(w):
+            return heldout_rmse(lambda train: fit_weights(train, w, cv_maxiter)[0], self.basis, obs, self.folds_)
+
+        self.one_step_cv_ = {}
+        if lam_dyn_grid is not None:
+            self.one_step_cv_["dyn"] = grid_search(lam_dyn_grid, lambda lam: cv_score(replace(weights, dyn=lam, addot=0.0)))
+            weights = replace(weights, dyn=self.one_step_cv_["dyn"].best, addot=0.0)
+        if lam_addot_grid_one_step is not None:
+            values = np.unique(np.r_[np.asarray(lam_addot_grid_one_step, dtype=float), self.state_cv_.best])
+            self.one_step_cv_["addot"] = grid_search(values, lambda lam: cv_score(replace(weights, addot=lam)))
+            weights = replace(weights, addot=self.one_step_cv_["addot"].best)
+        alpha, coef, self.refit_result_ = fit_weights(obs, weights, maxiter)
+        self.alpha_, self.coef_, self.method_, self.weights_ = np.asarray(alpha), np.asarray(coef), "one_step_soft", weights
         return self
 
     def refit_one_step_hard(self, obs, weights=OneStepWeights(), max_nfev=100):
-        """One-step hard on the selected atoms, started from the current fit: alpha_0 and coefficients."""
+        """One-step hard on the selected atoms, started from the current fit: alpha_0 and coefficients. Only
+        weights.data, weights.alpha (on alpha_0) and weights.beta are used."""
         alpha, coef, self.refit_result_ = fit_one_step_hard(self.stepper_, self.library_, self.grid, obs,
                                                             self.alpha_[0], self.coef_, weights, max_nfev)
         self.alpha_, self.coef_, self.method_ = np.asarray(alpha), np.asarray(coef), "one_step_hard"

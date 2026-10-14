@@ -208,15 +208,16 @@ Unknowns: $\alpha_0$ and $b_{\mathcal A}$ only. Every later column is $\alpha_n 
 hold exactly and the $\lambda_{\rm dyn}$ term disappears:
 
 $$J(\alpha_0, b) = \lambda_d \sum_{(n,k)\in\Omega} \big(y_{nk} - (K\alpha_n)_k\big)^2
- + \lambda_\alpha\, \alpha_0^\top K \alpha_0 + \lambda_\beta \sum_m \beta_m^\top K_m \beta_m
- + \frac{\lambda_{\ddot a}}{\Delta t^4} \sum_n \lVert \alpha_{n+1} - 2\alpha_n + \alpha_{n-1} \rVert_K^2 .$$
+ + \lambda_\alpha\, \alpha_0^\top K \alpha_0 + \lambda_\beta \sum_m \beta_m^\top K_m \beta_m .$$
 
-Solved like the two-step hard fit (least squares, Jacobian through the rollout), started from the one-step soft
-solution, with $\lambda_{\ddot a}$ by the same CV. In the notebook this cell runs only for experiment 3A.
+Solved like the two-step hard fit (least squares, Jacobian through the rollout), started from the two-step soft
+solution $(\bar\alpha_0, b_{\rm 2s})$.
 
-The package penalises the state norm on $\alpha_0$ only, the one free state variable. The notebook penalises
-$\lambda_\alpha \sum_n \alpha_n^\top K \alpha_n$ over all rolled-out columns, which fails when $K$ is
-ill-conditioned (section 9).
+The package penalises only the free variables $\alpha_0$ and $b$. The notebook (where this cell runs only for
+experiment 3A) differs in three ways: it penalises $\lambda_\alpha \sum_n \alpha_n^\top K \alpha_n$ over all
+rolled-out columns, which fails when $K$ is ill-conditioned (section 9); it adds the time prior
+$\frac{\lambda_{\ddot a}}{\Delta t^4} \sum_n \lVert \alpha_{n+1} - 2\alpha_n + \alpha_{n-1} \rVert_K^2$ on the rolled-out
+columns, with $\lambda_{\ddot a}$ by the same CV; and it starts from the one-step soft solution.
 
 ## 7. Summary and defaults
 
@@ -229,7 +230,7 @@ input:  grid (t_n, x_k), observations y on Omega, spatial kernel k
               -> one-standard-error rule -> active set A, coefficients b_2s (closed form)
 5. optional   two-step hard:  b_2h = fit through the rollout from alpha_bar_0
               one-step soft:  (alpha_1s, b_1s) = joint fit, lam_dyn and lam_addot by CV
-              one-step hard:  (alpha_0, b_1h), all columns = rollout
+              one-step hard:  (alpha_0, b_1h), all columns = rollout, from (alpha_bar_0, b_2s)
 output: P_hat(s) = Psi_A(s) b;  rollout alpha_n = Phi^n(K^-1 u_0; b)
 ```
 
@@ -237,7 +238,7 @@ output: P_hat(s) = Psi_A(s) b;  rollout alpha_n = Phi^n(K^-1 u_0; b)
 |---|---|---|
 | $\theta$, Newton iterations | $1/2$, 6 | time step |
 | nugget in $K + \epsilon I = L L^\top$ | $10^{-8}$ | whitening |
-| $\lambda_u$ | $10^{-6}$ | Step 1 (and $\lambda_\alpha$ in the one-step losses) |
+| $\lambda_u$ | $10^{-6}$ | Step 1 (and $\lambda_\alpha$ in the one-step losses; on $\alpha_0$ only in the hard one) |
 | $\lambda_{\ddot a}$ | CV, $\lbrace 0\rbrace \cup 10^{-12 \dots -1}$ | Step 1 |
 | $J$ inducing points | 15 | library |
 | $\lambda_{\rm dyn}$ | 1 | Step 2 soft |

@@ -74,7 +74,8 @@ def test_refits_improve_the_two_step_soft_fit(problem, fitted):
     assert two_step_hard.refit_result_.success and two_step_hard.method_ == "two_step_hard"
     assert rollout_error(two_step_hard, truth, grid) < 0.5 * soft_error
 
-    one_step_soft = copy.copy(fitted).refit_one_step_soft(obs, kt.OneStepWeights(dyn=1.0), maxiter=4000)
+    one_step_soft = copy.copy(fitted).refit_one_step_soft(obs, kt.OneStepWeights(dyn=1.0), lam_dyn_grid=None,
+                                                          lam_addot_grid_one_step=None, maxiter=4000)
     assert uxx_error(one_step_soft.alpha_) < 0.5 * uxx_error(fitted.alpha_)
     assert rollout_error(one_step_soft, truth, grid) < 0.5 * soft_error
 
@@ -95,6 +96,16 @@ def test_one_step_hard_with_default_weights_recovers_the_equation(problem, fitte
     slopes, _ = one_step_hard.library_.linear_coefficients(one_step_hard.coef_)
     assert abs(slopes["u_xx"] - KAPPA) < 0.01 * KAPPA and abs(slopes["u*u_x"] - ALPHA) < 0.01 * ALPHA
     assert rollout_error(one_step_hard, truth, grid) < 0.1 * rollout_error(fitted, truth, grid)
+
+
+def test_one_step_soft_cross_validates_lam_dyn_then_lam_addot(problem, fitted):
+    _, _, obs = problem
+    model = copy.copy(fitted).refit_one_step_soft(obs, lam_dyn_grid=[0.0, 1.0], lam_addot_grid_one_step=[0.0],
+                                                  cv_maxiter=300, maxiter=300)
+    dyn, addot = model.one_step_cv_["dyn"], model.one_step_cv_["addot"]
+    assert dyn.fold_scores.shape == (2, 5) and dyn.best == 1.0                   # the dynamics help on held-out data
+    assert set(addot.values) == {0.0, fitted.state_cv_.best}                     # the Step-1 value is always a candidate
+    assert model.weights_.dyn == dyn.best and model.weights_.addot == addot.best
 
 
 def test_fit_method_runs_the_same_stages(problem, fitted):

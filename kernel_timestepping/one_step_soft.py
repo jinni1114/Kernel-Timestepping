@@ -9,8 +9,9 @@ Unknowns alpha_0..alpha_{N_T-1} and b,
                 + lam_addot / dt^4 sum_n ||alpha_{n+1} - 2 alpha_n + alpha_{n-1}||_K^2,
 
 minimised by L-BFGS-B in the whitened state coordinates w_n = L^T alpha_n. The library (standardisation, inducing
-points, active atoms) stays frozen. `OneStepWeights` is shared with the hard constraint (one_step_hard.py), where the
-lam_dyn term drops out.
+points, active atoms) stays frozen. `OneStepWeights` is shared with the hard constraint (one_step_hard.py), which
+uses only data, alpha (on alpha_0) and beta. KMDTimeStepper.refit_one_step_soft chooses lam_dyn, then lam_addot, by
+K-fold cross-validation on held-out interior observations.
 """
 from dataclasses import dataclass
 
@@ -26,9 +27,9 @@ class OneStepWeights:
     """Weights of the one-step loss (module docstring)."""
     data: float = 1.0       # lam_d
     dyn: float = 1.0        # lam_dyn (soft constraint only)
-    alpha: float = 1e-6     # lam_alpha
+    alpha: float = 1e-6     # lam_alpha (hard constraint: on alpha_0 only)
     beta: float = 1e-8      # lam_beta
-    addot: float = 0.0      # lam_addot
+    addot: float = 0.0      # lam_addot (soft constraint only)
 
 
 def fit_one_step_soft(stepper, library, grid, obs, alpha_init, coef_init, weights=OneStepWeights(), maxiter=20000):
