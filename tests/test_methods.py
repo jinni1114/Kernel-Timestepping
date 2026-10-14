@@ -71,7 +71,7 @@ def test_refits_improve_the_two_step_soft_fit(problem, fitted):
         return kt.relative_l2(np.asarray(fitted.basis.jets(jnp.asarray(alpha)))[..., 2], jets_true[..., 2])
 
     two_step_hard = copy.copy(fitted).refit_two_step_operator_hard()
-    assert two_step_hard.refit_result_.success and two_step_hard.method_ == "two_step_hard"
+    assert two_step_hard.refit_result_.converged and two_step_hard.method_ == "two_step_hard"
     assert rollout_error(two_step_hard, truth, grid) < 0.5 * soft_error
 
     one_step_soft = copy.copy(fitted).refit_one_step_soft(obs, kt.OneStepWeights(dyn=1.0), lam_dyn_grid=None,
@@ -93,6 +93,7 @@ def test_one_step_hard_with_default_weights_recovers_the_equation(problem, fitte
     """The state norm is on alpha_0 only: a norm on the rolled-out columns biased u*u_x to about 0.49 here."""
     truth, grid, obs = problem
     one_step_hard = copy.copy(fitted).refit_one_step_hard(obs)
+    assert one_step_hard.refit_result_.converged
     slopes, _ = one_step_hard.library_.linear_coefficients(one_step_hard.coef_)
     assert abs(slopes["u_xx"] - KAPPA) < 0.01 * KAPPA and abs(slopes["u*u_x"] - ALPHA) < 0.01 * ALPHA
     assert rollout_error(one_step_hard, truth, grid) < 0.1 * rollout_error(fitted, truth, grid)
@@ -106,6 +107,18 @@ def test_one_step_soft_cross_validates_lam_dyn_then_lam_addot(problem, fitted):
     assert dyn.fold_scores.shape == (2, 5) and dyn.best == 1.0                   # the dynamics help on held-out data
     assert set(addot.values) == {0.0, fitted.state_cv_.best}                     # the Step-1 value is always a candidate
     assert model.weights_.dyn == dyn.best and model.weights_.addot == addot.best
+
+
+def test_stalled_hard_fit_is_flagged(problem):
+    """Observation draw 1 keeps an RBF atom on u_xxx; the two-step hard fit stops after 2 evaluations (xtol) with a
+    large gradient. scipy calls that a success; the wrapper must not."""
+    truth, grid, _ = problem
+    obs = kt.sample_nodal_observations(grid, lambda t, x: truth.u(t, x, grid=False), n_interior=100, seed=1)
+    model = kt.KMDTimeStepper(GaussianRBFKernel(lengthscale=state_lengthscale(grid, obs)), grid).fit(obs)
+    assert "rbf[u_xxx]" in model.library_.names
+    with pytest.warns(RuntimeWarning, match="stationary point"):
+        model.refit_two_step_operator_hard()
+    assert model.refit_result_.success and not model.refit_result_.converged
 
 
 def test_fit_method_runs_the_same_stages(problem, fitted):

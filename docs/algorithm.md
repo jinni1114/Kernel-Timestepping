@@ -373,9 +373,13 @@ lowest CV score at 5 atoms; the one-standard-error rule reduces it to the two tr
   select only the true atoms; 1.2 % and 1.0 % on the two that keep an extra atom on $u_{xxx}$, where the optimiser stops after
   3 to 4 evaluations).
   The soft variants are not affected: their states are penalised fits, not rollouts.
-* **The two-step hard fit can stall with kernel atoms on $u_{xxx}$.** For one of the draws above, the optimiser
-  stopped after 11 evaluations with unchanged coefficients (step-size tolerance reached, gradient not small).
-  `KMDTimeStepper.refit_result_` keeps the optimiser result so this can be checked.
+* **Both hard fits can stall with kernel atoms on $u_{xxx}$.** On the two draws above that keep such an atom, the
+  optimiser stops after 2 to 4 evaluations with the coefficients nearly unchanged: the step-size tolerance is met
+  because the trust region has collapsed, not because the gradient is small, and scipy reports success. Tighter
+  tolerances, `x_scale=1` or a larger $\lambda_\beta$ do not help; the Jacobian of the rollout with respect to the
+  atom's coefficients reaches 1e4 to 1e31. `least_squares_jax` therefore adds `converged` (the largest cosine
+  between the residual and a Jacobian column is at most $10^{-3}$) to the result, kept in
+  `KMDTimeStepper.refit_result_`, and warns when it is False.
 * **The one-step soft fit often ends at the iteration cap** (20 000 L-BFGS iterations). On the 3A data it converged
   after about 11 500; in the example it reached the cap, and running it to convergence (about 29 400 iterations)
   changed the coefficients in the sixth digit.
